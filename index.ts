@@ -1,20 +1,19 @@
-import express from 'express';
 import { config } from 'dotenv';
 import { readFileSync, writeFileSync } from 'fs';
-import TelegramBot from 'node-telegram-bot-api';
-import { Configuration, OpenAIApi } from 'openai'
+import { Telegraf } from 'telegraf';
+import { Configuration, OpenAIApi } from 'openai';
 
 config();
 
+const BOT_TOKEN = process.env.BOT_TOKEN || '';
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const bot = new Telegraf(BOT_TOKEN);
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
-const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const RULES_FILE = 'rules.json';
 const CONFIGS_FILE = 'configs.json';
-const authors = ['Джейсон Стейтем', "Альберт Эйнштейн", "Конфуций", "Виталий Кличко", "Жак Фреско", "Гордый волк", "Гитлер", "Владимир Владимирович Путин", "Ельцин", "Джо Байден"];
 let rules: string[] = [];
 let ruleIndex = 0;
 let configs;
@@ -45,23 +44,12 @@ if (OPENAI_API_KEY === '') {
   process.exit(1);
 }
 
-const bot = new TelegramBot(BOT_TOKEN, { polling: true });
-const app = express();
-
-app.get('/', (_, res) => {
-  res.send('The bot is running!');
+bot.command('start', (ctx) => {
+  ctx.reply('Привет! Я бот, который будет присылать "золотые правила" в группу. Для просмотра списка команд, напишите /help');
 });
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log(`Server is listening on port ${process.env.PORT || 3000}`);
-});
-
-bot.onText(/\/start/, (msg) => {
-  bot.sendMessage(msg.chat.id, 'Привет! Я бот, который будет присылать "золотые правила" в группу. Для администрирования используйте команды /add_rule, /edit_rule, /show_rules, /delete_rule и /set_interval.');
-});
-
-bot.onText(/\/add_rule (.+)/, (msg, match) => {
-  const rule = match[1];
+bot.command('add_rule', (ctx) => {
+  const rule = ctx.message.text.split(' ').slice(1).join(' ');
   rules.push(rule);
 
   try {
@@ -69,15 +57,16 @@ bot.onText(/\/add_rule (.+)/, (msg, match) => {
     // Send success message to the chat.
   } catch (err) {
     console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
-    bot.sendMessage(msg.chat.id, 'Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+    ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
   }
 
-  bot.sendMessage(msg.chat.id, `Новое правило "${rule}" добавлено.`);
+  ctx.reply(`Новое правило "${rule}" добавлено.`);
 });
 
-bot.onText(/\/edit_rule (\d+) (.+)/, (msg, match) => {
-  const index = parseInt(match[1]) - 1;
-  const newText = match[2];
+bot.command('edit_rule', (ctx) => {
+  const commandParts = ctx.message.text.split(' ').slice(1);
+  const index = parseInt(commandParts[0]) - 1;
+  const newText = commandParts.slice(1).join(' ');
 
   if (index >= 0 && index < rules.length) {
     rules[index] = newText;
@@ -86,16 +75,16 @@ bot.onText(/\/edit_rule (\d+) (.+)/, (msg, match) => {
       // Send success message to the chat.
     } catch (err) {
       console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
-      bot.sendMessage(msg.chat.id, 'Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+      ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
     }
-    bot.sendMessage(msg.chat.id, `Правило номер ${index + 1} изменено на "${newText}".`);
+    ctx.reply(`Правило номер ${index + 1} изменено на "${newText}".`);
   } else {
-    bot.sendMessage(msg.chat.id, 'Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
+    ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
   }
 });
 
-bot.onText(/\/delete_rule (\d+)/, (msg, match) => {
-  const index = parseInt(match[1]) - 1;
+bot.command('delete_rule', (ctx) => {
+  const index = parseInt(ctx.message.text.split(' ')[1]) - 1;
 
   if (index >= 0 && index < rules.length) {
     rules.splice(index, 1);
@@ -104,15 +93,15 @@ bot.onText(/\/delete_rule (\d+)/, (msg, match) => {
       // Send success message to the chat.
     } catch (err) {
       console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
-      bot.sendMessage(msg.chat.id, 'Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+      ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
     }
-    bot.sendMessage(msg.chat.id, `Правило номер ${index + 1} удалено.`);
+    ctx.reply(`Правило номер ${index + 1} удалено.`);
   } else {
-    bot.sendMessage(msg.chat.id, 'Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
+    ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
   }
 });
 
-bot.onText(/\/help/, (msg) => {
+bot.command('help', (ctx) => {
   const response = [
     'Доступные команды:',
     '/start_sending - начать отправку цитат',
@@ -121,52 +110,82 @@ bot.onText(/\/help/, (msg) => {
     '/edit_rule <индекс> <текст> - изменить существующее правило',
     '/delete_rule <индекс> - удалить существующее правило',
     '/set_interval <минуты> - установить интервал для отправки правил',
+    '/change_picture_prompt <prompt> - изменить промпт для генерации изображения',
+    '/set_default_prompt - установить дефолтный промпт для генерации изображения',
     '/help - показать список команд'
   ].join('\n');
 
-  bot.sendMessage(msg.chat.id, response);
+  ctx.reply(response);
 });
 
 let intervalId: NodeJS.Timeout;
 
-bot.onText(/\/stop/, (msg) => {
+bot.command('stop', (ctx) => {
   if (intervalId) {
     clearInterval(intervalId);
-    bot.sendMessage(msg.chat.id, 'Отправка правил остановлена.');
+    ctx.reply('Отправка правил остановлена.');
   } else {
-    bot.sendMessage(msg.chat.id, 'Отправка правил не была запущена.');
+    ctx.reply('Отправка правил не была запущена.');
   }
 });
 
 
-bot.onText(/\/show_rules/, (msg) => {
+bot.command('show_rules', (ctx) => {
   const response = rules.map((rule, index) => `${index + 1}. ${rule}`).join('\n');
-  bot.sendMessage(msg.chat.id, response || 'Нет правил.');
+  ctx.reply(response || 'Нет правил.');
 });
 
 // Create a new command to start sending quotes with the default interval
-bot.onText(/\/start_sending/, (msg) => {
-  sendRule(msg.chat.id);
-  startSendingRules(msg.chat.id, currentInterval);
-  bot.sendMessage(msg.chat.id, `Отправка правил начата с интервалом в ${currentInterval} минут.`);
+bot.command('start_sending', (ctx) => {
+  sendRule(ctx);
+  startSendingRules(ctx, currentInterval);
+  ctx.reply(`Отправка правил начата с интервалом в ${currentInterval} минут.`);
 });
 
-bot.onText(/\/set_interval (\d+)/, (msg, match) => {
-  const intervalMinutes = parseInt(match[1]);
+bot.command('set_interval', (ctx) => {
+  const intervalMinutes = parseInt(ctx.message.text.split(' ')[1]);
 
   if (intervalMinutes && intervalMinutes > 0) {
     currentInterval = intervalMinutes;
-    saveIntervalToConfigs(currentInterval, msg.chat.id);
+    saveIntervalToConfigs(currentInterval, ctx);
 
-    startSendingRules(msg.chat.id, currentInterval);
-    bot.sendMessage(msg.chat.id, `Интервал установлен на ${currentInterval} минут.`);
+    startSendingRules(ctx, currentInterval);
+    ctx.reply(`Интервал установлен на ${currentInterval} минут.`);
   } else {
-    bot.sendMessage(msg.chat.id, 'Usage: /setinterval <minutes>');
+    ctx.reply('Usage: /setinterval <minutes>');
   }
 });
 
-async function stylizeText(text: string, author: string): Promise<string> {
-  // const prompt = `Придумай смешную цитату в стиле мема "цитаты великих людей" от ${author} к фразе "${text}".В ответ пришли текст цитаты и автора на русском языке.`;
+bot.command('change_picture_prompt', (ctx) => {
+  const prompt = ctx.message.text.split(' ').slice(1).join(' ');
+
+  if (prompt) {
+    configs.picturePrompt = prompt;
+    try {
+      writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
+      ctx.reply(`Промпт для картинки изменен на "${prompt}".`);
+    } catch (err) {
+      console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
+      ctx.reply('Произошла ошибка при обновлении промпта для картинки. Пожалуйста, попробуйте позже.');
+    }
+  } else {
+    ctx.reply('Usage: /change_picture_prompt <prompt>');
+  }
+});
+
+bot.command('set_default_prompt', (ctx) => {
+    configs.picturePrompt = "";
+
+    try {
+      writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
+      ctx.reply(`Промпт для картинки изменен на дефолтный`);
+    } catch (err) {
+      console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
+      ctx.reply('Произошла ошибка при обновлении промпта для картинки. Пожалуйста, попробуйте позже.');
+    }
+});
+
+async function stylizeText(text: string): Promise<string> {
   const prompt = `Напиши очень эмоциональный мотивационный текст для фразы "${text}". В ответ не пиши ничего, кроме самого текста большими буквами на русском языке`;
   const completions = await openai.createCompletion({
     model: "text-davinci-003",
@@ -184,55 +203,57 @@ async function stylizeText(text: string, author: string): Promise<string> {
 }
 
 async function generateImage() {
+  const prompt = configs.picturePrompt || configs.defaultPicturePrompt;
+
   const response = await openai.createImage({
-    prompt: 'Generate an realistic image of a cat in armor with a serious facial expression, holding a sword and ready for battle, with a background that emphasizes its knightly appearance.',
+    prompt,
     size: '512x512'
   })
 
   return response.data.data[0].url;
 }
 
-async function sendRule(chatId: number) {
+async function sendRule(ctx) {
   if (rules.length === 0) {
-    bot.sendMessage(chatId, 'Нет правил.');
+    ctx.reply('Нет правил.');
     return;
   }
 
   const rule = rules[ruleIndex];
   ruleIndex = (ruleIndex + 1) % rules.length;
-  // Choose a random style
-  const author = authors[Math.floor(Math.random() * authors.length)];
 
   try {
-    const stylizedText = await stylizeText(rule, author);
+    const stylizedText = await stylizeText(rule);
     const pictureUrl = await generateImage();
-    bot.sendPhoto(chatId, pictureUrl, { caption: stylizedText });
+    await ctx.replyWithPhoto(pictureUrl, { caption: stylizedText });
   } catch (error) {
     console.error('Error in stylizing text:', error);
-    bot.sendMessage(chatId, 'Произошла ошибка при стилизации текста. Пожалуйста, попробуйте позже.');
+    ctx.reply('Произошла ошибка при стилизации текста. Пожалуйста, попробуйте позже.');
   }
 }
 
 // Replace setInterval with a recursive function
-function startSendingRules(chatId: number, intervalMinutes: number) {
+function startSendingRules(ctx: any, intervalMinutes: number) {
   if (intervalId) {
     clearTimeout(intervalId);
   }
 
   intervalId = setTimeout(() => {
-    sendRule(chatId);
-    startSendingRules(chatId, intervalMinutes);
-  }, intervalMinutes * 30 * 1000);
+    sendRule(ctx);
+    startSendingRules(ctx, intervalMinutes);
+  }, intervalMinutes * 10 * 1000);
 }
 
 // Function to save the interval to configs.json
-function saveIntervalToConfigs(interval: number, chatId: string) {
+function saveIntervalToConfigs(interval: number, ctx: any) {
   configs.interval = interval;
   try {
     writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
     // Send success message to the chat.
   } catch (err) {
     console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
-    bot.sendMessage(chatId, 'Произошла ошибка при установке нового интервала. Пожалуйста, попробуйте позже.');
+    ctx.reply('Произошла ошибка при установке нового интервала. Пожалуйста, попробуйте позже.');
   }
 }
+
+bot.launch();
