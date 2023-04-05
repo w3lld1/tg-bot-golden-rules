@@ -112,13 +112,14 @@ bot.command('help', (ctx) => {
     '/set_interval <минуты> - установить интервал для отправки правил',
     '/change_picture_prompt <prompt> - изменить промпт для генерации изображения',
     '/set_default_prompt - установить дефолтный промпт для генерации изображения',
+    '/generate_picture <prompt> - сгенерировать картинку по промпту',
     '/help - показать список команд'
   ].join('\n');
 
   ctx.reply(response);
 });
 
-let intervalId: NodeJS.Timeout;
+let intervalId: any;
 
 bot.command('stop', (ctx) => {
   if (intervalId) {
@@ -173,6 +174,25 @@ bot.command('change_picture_prompt', (ctx) => {
   }
 });
 
+bot.command('generate_picture', async (ctx) => {
+  const prompt = ctx.message.text.split(' ').slice(1).join(' ');
+  let pictureUrl = ''
+
+  if (prompt) {
+    try {
+      pictureUrl = await generateImage(prompt);
+    } catch (e) {
+      ctx.reply("Ошибка при генерации картинки");
+    }
+
+    if (pictureUrl) {
+      await ctx.replyWithPhoto(pictureUrl)
+    }
+  } else {
+    ctx.reply("Введите промпт для генерации картинки. /generate_picture <prompt>")
+  }
+});
+
 bot.command('set_default_prompt', (ctx) => {
     configs.picturePrompt = "";
 
@@ -202,8 +222,8 @@ async function stylizeText(text: string): Promise<string> {
   return `${text}\n\n${completions.data.choices[0].text.trim()}`;
 }
 
-async function generateImage() {
-  const prompt = configs.picturePrompt || configs.defaultPicturePrompt;
+async function generateImage(enteredPrompt = '') {
+  const prompt = enteredPrompt || configs.picturePrompt || configs.defaultPicturePrompt;
 
   const response = await openai.createImage({
     prompt,
@@ -233,13 +253,22 @@ async function sendRule(ctx) {
 }
 
 // Replace setInterval with a recursive function
-function startSendingRules(ctx: any, intervalMinutes: number) {
+function startSendingRules(ctx, intervalMinutes) {
   if (intervalId) {
     clearTimeout(intervalId);
   }
 
   intervalId = setTimeout(() => {
-    sendRule(ctx);
+    const currentTime = new Date();
+    const currentHour = currentTime.getHours();
+
+    // Не отправлять правила с 22:00 до 08:00
+    if (currentHour >= 22 || currentHour < 8) {
+      console.log('Ночной режим активен, правила не отправляются');
+    } else {
+      sendRule(ctx);
+    }
+
     startSendingRules(ctx, intervalMinutes);
   }, intervalMinutes * 60 * 1000);
 }
