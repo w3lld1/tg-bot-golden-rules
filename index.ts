@@ -241,7 +241,7 @@ function startSendingRules(ctx: any, intervalMinutes: number) {
   intervalId = setTimeout(() => {
     sendRule(ctx);
     startSendingRules(ctx, intervalMinutes);
-  }, intervalMinutes * 10 * 1000);
+  }, intervalMinutes * 60 * 1000);
 }
 
 // Function to save the interval to configs.json
