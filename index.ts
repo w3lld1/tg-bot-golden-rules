@@ -6,15 +6,31 @@ import { Configuration, OpenAIApi } from 'openai';
 
 config();
 
-const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
+const isDev = process.env.NODE_ENV === 'development';
+const DEV_TOKENS = isDev ? path.join(__dirname, '..', 'bots_data', 'golden_rules', 'tokens.json') : '';
+let devBotToken = '';
+let devOpenAiKey = '';
+
+if (isDev) {
+  try {
+    const tokensData = readFileSync(DEV_TOKENS, 'utf-8');
+    const devTokens = JSON.parse(tokensData);
+    devBotToken = devTokens?.BOT_TOKEN ?? '';
+    devOpenAiKey = devTokens?.OPENAI_API_KEY ?? '';
+  } catch (err) {
+    console.error(`Error reading ${DEV_TOKENS}: ${err.message}`);
+  }
+}
+
+const BOT_TOKEN = isDev ? devBotToken : (process.env.BOT_TOKEN ?? '');
+const OPENAI_API_KEY = isDev ? devOpenAiKey : (process.env.OPENAI_API_KEY ?? '');
 const bot = new Telegraf(BOT_TOKEN);
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
-const RULES_FILE = path.join(__dirname, '..', 'bots_data', 'golden_rules', 'rules.json')
-const CONFIGS_FILE = path.join(__dirname, '..', 'bots_data', 'golden_rules', 'configs.json')
+const RULES_FILE = isDev ? path.join(__dirname, '..', 'bots_data', 'golden_rules', 'rules.json') : path.join(__dirname, '..', '..', 'bots_data', 'golden_rules', 'rules.json')
+const CONFIGS_FILE = isDev ? path.join(__dirname, '..', 'bots_data', 'golden_rules', 'configs.json') : path.join(__dirname, '..', '..', 'bots_data', 'golden_rules', 'configs.json')
 const intervalsIds = new Map();
 let ruleIndex = 0;
 let rules: Record<string, string[]>;
