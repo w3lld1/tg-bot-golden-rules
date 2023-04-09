@@ -299,11 +299,11 @@ async function isAdmin(ctx: any): Promise<boolean> {
 }
 
 async function stylizeText(text: string): Promise<string> {
-  const prompt = `Напиши очень эмоциональный мотивационный текст для фразы "${text}". В ответ не пиши ничего, кроме самого текста большими буквами на русском языке`;
+  const prompt = `Напиши очень эмоциональный мотивационный текст для фразы "${text}". В ответ пришли только сам текста на русском языке и ничего кроме. Ограничение по символам - 800`;
   const completions = await openai.createCompletion({
     model: "text-davinci-003",
     prompt: prompt,
-    max_tokens: 3000,
+    max_tokens: 3500,
     temperature: 0.7,
     top_p: 1,
   });
@@ -312,7 +312,7 @@ async function stylizeText(text: string): Promise<string> {
     throw new Error('No completions generated.');
   }
 
-  return `${text}\n\n${completions.data.choices[0].text.trim()}`;
+  return `"${text}"\n\n${completions.data.choices[0].text.slice(2).trim()}`;
 }
 
 async function generateImage(ctx, enteredPrompt = '') {
