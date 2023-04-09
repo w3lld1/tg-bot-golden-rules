@@ -60,15 +60,31 @@ if (OPENAI_API_KEY === '') {
   process.exit(1);
 }
 
+function getRules(chatId) {
+  if (!rules[chatId]) {
+    rules[chatId] = [ ...rules.default ];
+  }
+
+  return rules[chatId];
+}
+
+function getConfigs(chatId) {
+  if (!configs[chatId]) {
+    configs[chatId] = { ...configs.default };
+  }
+
+  return configs[chatId];
+}
+
 bot.command('start', (ctx) => {
   const chatId = ctx.chat.id;
 
   if (!configs[chatId]) {
-    configs[chatId] = configs.default;
+    configs[chatId] = { ...configs.default };
   }
 
   if (!rules[chatId]) {
-    rules[chatId] = rules.default;
+    rules[chatId] = [ ...rules.default ];
   }
 
   ctx.reply('Привет! Я бот, который будет присылать "золотые правила" в группу. Для просмотра списка команд, напишите /help');
@@ -78,10 +94,12 @@ bot.command('add_rule', async (ctx) => {
   if (await isAdmin(ctx)) {
     const rule = ctx.message.text.split(' ').slice(1).join(' ');
     const chatId = ctx.chat.id;
+    let currentRules = getRules(chatId);
 
-    rules[chatId] = [...rules[chatId], rule];
+    currentRules = [...currentRules, rule];
 
     try {
+      rules = { ...rules, [chatId]: currentRules };
       writeFileSync(RULES_FILE, JSON.stringify(rules));
       // Send success message to the chat.
     } catch (err) {
@@ -101,7 +119,7 @@ bot.command('edit_rule', async (ctx) => {
     const chatId = ctx.chat.id;
     const index = parseInt(commandParts[0]) - 1;
     const newText = commandParts.slice(1).join(' ');
-    const currentRules = rules[chatId] ?? rules.default;
+    const currentRules = getRules(chatId);
 
     if (index >= 0 && index < currentRules.length) {
       currentRules[index] = newText;
@@ -126,7 +144,7 @@ bot.command('delete_rule', async (ctx) => {
   if (await isAdmin(ctx)) {
     const index = parseInt(ctx.message.text.split(' ')[1]) - 1;
     const chatId = ctx.chat.id;
-    const currentRules = rules[chatId] ?? rules.default;
+    const currentRules = getRules(chatId);
 
     if (index >= 0 && index < currentRules.length) {
       currentRules.splice(index, 1);
@@ -184,7 +202,7 @@ bot.command('stop', async (ctx) => {
 
 bot.command('show_rules', (ctx) => {
   const chatId = ctx.chat.id;
-  const currentRules = rules[chatId] ?? rules.default;
+  const currentRules = getRules(chatId);
   const response = currentRules.map((rule, index) => `${index + 1}. ${rule}`).join('\n');
   ctx.reply(response || 'Нет правил.');
 });
@@ -194,16 +212,17 @@ bot.command('start_sending', async (ctx) => {
   const chatId = ctx.chat.id;
 
   if (!configs[chatId]) {
-    configs[chatId] = configs.default;
+    configs[chatId] = { ...configs.default };
   }
 
   if (!rules[chatId]) {
-    rules[chatId] = rules.default;
+    rules[chatId] = [ ...rules.default ];
   }
 
   if (await isAdmin(ctx)) {
     const chatId = ctx.chat.id
-    let currentInterval = configs[chatId]?.interval ?? configs.default.interval;
+    let currentConfigs = getConfigs(chatId)
+    let currentInterval = currentConfigs.interval;
 
     sendRule(ctx);
     startSendingRules(ctx, currentInterval);
@@ -240,11 +259,12 @@ bot.command('show_interval', (ctx) => {
 bot.command('change_picture_prompt', (ctx) => {
   const prompt = ctx.message.text.split(' ').slice(1).join(' ');
   const chatId = ctx.chat.id;
+  let currentConfigs = getConfigs(chatId)
 
   if (prompt) {
-    configs[chatId] = { ...configs[chatId], picturePrompt: prompt };
+    currentConfigs = { ...currentConfigs, picturePrompt: prompt };
     try {
-      writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
+      writeFileSync(CONFIGS_FILE, JSON.stringify({ ...configs, [chatId]: currentConfigs }));
       ctx.reply(`Промпт для картинки изменен на "${prompt}".`);
     } catch (err) {
       console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
@@ -276,11 +296,11 @@ bot.command('generate_picture', async (ctx) => {
 
 bot.command('set_default_prompt', (ctx) => {
     const chatId = ctx.chat.id;
-
-    configs[chatId] = { ...configs[chatId], picturePrompt: "" };
+    let currentConfigs = getConfigs(chatId);
+    currentConfigs = { ...currentConfigs, picturePrompt: "" };
 
     try {
-      writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
+      writeFileSync(CONFIGS_FILE, JSON.stringify({ ...configs, [chatId]: currentConfigs }));
       ctx.reply(`Промпт для картинки изменен на дефолтный`);
     } catch (err) {
       console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
@@ -327,7 +347,8 @@ async function stylizeText(text: string): Promise<string> {
 
 async function generateImage(ctx, enteredPrompt = '') {
   const chatId = ctx.chat.id;
-  const prompt = enteredPrompt || (configs[chatId]?.picturePrompt ?? configs.default.picturePrompt) || (configs[chatId]?.defaultPicturePrompt ?? configs.default.defaultPicturePrompt);
+  let currentConfigs = getConfigs(chatId);
+  const prompt = enteredPrompt || currentConfigs.picturePrompt || currentConfigs.defaultPicturePrompt;
 
   const response = await openai.createImage({
     prompt,
@@ -339,7 +360,7 @@ async function generateImage(ctx, enteredPrompt = '') {
 
 async function sendRule(ctx) {
   const chatId = ctx.chat.id;
-  const currentRules = rules[chatId] ?? rules.default;
+  const currentRules = getRules(chatId);
 
   if (currentRules.length === 0) {
     ctx.reply('Нет правил.');
@@ -387,11 +408,11 @@ function startSendingRules(ctx, intervalMinutes) {
 // Function to save the interval to configs.json
 function saveIntervalToConfigs(interval: number, ctx: any) {
   const chatId = ctx.chat.id;
-
-  configs[chatId] = { ...configs[chatId], interval };
+  let currentConfigs = getConfigs(chatId);
+  currentConfigs = { ...currentConfigs, interval };
 
   try {
-    writeFileSync(CONFIGS_FILE, JSON.stringify(configs));
+    writeFileSync(CONFIGS_FILE, JSON.stringify({ ...configs, [chatId]: currentConfigs }));
     // Send success message to the chat.
   } catch (err) {
     console.error(`Error writing to ${CONFIGS_FILE}: ${err.message}`);
