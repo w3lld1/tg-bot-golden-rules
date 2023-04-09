@@ -26,7 +26,7 @@ const BOT_TOKEN = isDev ? devBotToken : (process.env.BOT_TOKEN ?? '');
 const OPENAI_API_KEY = isDev ? devOpenAiKey : (process.env.OPENAI_API_KEY ?? '');
 const bot = new Telegraf(BOT_TOKEN);
 const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: OPENAI_API_KEY,
 });
 const openai = new OpenAIApi(configuration);
 const RULES_FILE = isDev ? path.join(__dirname, '..', 'bots_data', 'golden_rules', 'rules.json') : path.join(__dirname, '..', '..', 'bots_data', 'golden_rules', 'rules.json')
@@ -74,64 +74,76 @@ bot.command('start', (ctx) => {
   ctx.reply('Привет! Я бот, который будет присылать "золотые правила" в группу. Для просмотра списка команд, напишите /help');
 });
 
-bot.command('add_rule', (ctx) => {
-  const rule = ctx.message.text.split(' ').slice(1).join(' ');
-  const chatId = ctx.chat.id;
+bot.command('add_rule', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const rule = ctx.message.text.split(' ').slice(1).join(' ');
+    const chatId = ctx.chat.id;
 
-  rules[chatId] = [...rules[chatId], rule];
+    rules[chatId] = [...rules[chatId], rule];
 
-  try {
-    writeFileSync(RULES_FILE, JSON.stringify(rules));
-    // Send success message to the chat.
-  } catch (err) {
-    console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
-    ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
-  }
-
-  ctx.reply(`Новое правило "${rule}" добавлено.`);
-});
-
-bot.command('edit_rule', (ctx) => {
-  const commandParts = ctx.message.text.split(' ').slice(1);
-  const chatId = ctx.chat.id;
-  const index = parseInt(commandParts[0]) - 1;
-  const newText = commandParts.slice(1).join(' ');
-  const currentRules = rules[chatId] ?? rules.default;
-
-  if (index >= 0 && index < currentRules.length) {
-    currentRules[index] = newText;
     try {
-      rules = { ...rules, [chatId]: currentRules };
       writeFileSync(RULES_FILE, JSON.stringify(rules));
       // Send success message to the chat.
     } catch (err) {
       console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
       ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
     }
-    ctx.reply(`Правило номер ${index + 1} изменено на "${newText}".`);
+
+    ctx.reply(`Новое правило "${rule}" добавлено.`);
   } else {
-    ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
   }
 });
 
-bot.command('delete_rule', (ctx) => {
-  const index = parseInt(ctx.message.text.split(' ')[1]) - 1;
-  const chatId = ctx.chat.id;
-  const currentRules = rules[chatId] ?? rules.default;
+bot.command('edit_rule', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const commandParts = ctx.message.text.split(' ').slice(1);
+    const chatId = ctx.chat.id;
+    const index = parseInt(commandParts[0]) - 1;
+    const newText = commandParts.slice(1).join(' ');
+    const currentRules = rules[chatId] ?? rules.default;
 
-  if (index >= 0 && index < currentRules.length) {
-    currentRules.splice(index, 1);
-    try {
-      rules = { ...rules, [chatId]: currentRules };
-      writeFileSync(RULES_FILE, JSON.stringify(rules));
-      // Send success message to the chat.
-    } catch (err) {
-      console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
-      ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+    if (index >= 0 && index < currentRules.length) {
+      currentRules[index] = newText;
+      try {
+        rules = { ...rules, [chatId]: currentRules };
+        writeFileSync(RULES_FILE, JSON.stringify(rules));
+        // Send success message to the chat.
+      } catch (err) {
+        console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
+        ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+      }
+      ctx.reply(`Правило номер ${index + 1} изменено на "${newText}".`);
+    } else {
+      ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
     }
-    ctx.reply(`Правило номер ${index + 1} удалено.`);
   } else {
-    ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
+  }
+});
+
+bot.command('delete_rule', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const index = parseInt(ctx.message.text.split(' ')[1]) - 1;
+    const chatId = ctx.chat.id;
+    const currentRules = rules[chatId] ?? rules.default;
+
+    if (index >= 0 && index < currentRules.length) {
+      currentRules.splice(index, 1);
+      try {
+        rules = { ...rules, [chatId]: currentRules };
+        writeFileSync(RULES_FILE, JSON.stringify(rules));
+        // Send success message to the chat.
+      } catch (err) {
+        console.error(`Error writing to ${RULES_FILE}: ${err.message}`);
+        ctx.reply('Произошла ошибка при обновлении правил. Пожалуйста, попробуйте позже.');
+      }
+      ctx.reply(`Правило номер ${index + 1} удалено.`);
+    } else {
+      ctx.reply('Неправильный индекс. Используйте /show_rules, чтобы увидеть все правила.');
+    }
+  } else {
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
   }
 });
 
@@ -154,15 +166,19 @@ bot.command('help', (ctx) => {
   ctx.reply(response);
 });
 
-bot.command('stop', (ctx) => {
-  const chatId = ctx.chat.id;
+bot.command('stop', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const chatId = ctx.chat.id;
 
-  if (intervalsIds.has(chatId)) {
-    clearInterval(intervalsIds.get(chatId));
-    intervalsIds.delete(chatId);
-    ctx.reply('Отправка правил остановлена.');
+    if (intervalsIds.has(chatId)) {
+      clearInterval(intervalsIds.get(chatId));
+      intervalsIds.delete(chatId);
+      ctx.reply('Отправка правил остановлена.');
+    } else {
+      ctx.reply('Отправка правил не была запущена.');
+    }
   } else {
-    ctx.reply('Отправка правил не была запущена.');
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
   }
 });
 
@@ -174,27 +190,35 @@ bot.command('show_rules', (ctx) => {
 });
 
 // Create a new command to start sending quotes with the default interval
-bot.command('start_sending', (ctx) => {
-  const chatId = ctx.chat.id
-  let currentInterval = configs[chatId]?.interval ?? configs.default.interval;
+bot.command('start_sending', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const chatId = ctx.chat.id
+    let currentInterval = configs[chatId]?.interval ?? configs.default.interval;
 
-  sendRule(ctx);
-  startSendingRules(ctx, currentInterval);
-  ctx.reply(`Отправка правил начата с интервалом в ${currentInterval} минут.`);
+    sendRule(ctx);
+    startSendingRules(ctx, currentInterval);
+    ctx.reply(`Отправка правил начата с интервалом в ${currentInterval} минут.`);
+  } else {
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
+  }
 });
 
-bot.command('set_interval', (ctx) => {
-  const intervalMinutes = parseInt(ctx.message.text.split(' ')[1]);
-  let currentInterval = configs[ctx.chat.id]?.interval ?? configs.default.interval;
+bot.command('set_interval', async (ctx) => {
+  if (await isAdmin(ctx)) {
+    const intervalMinutes = parseInt(ctx.message.text.split(' ')[1]);
+    let currentInterval = configs[ctx.chat.id]?.interval ?? configs.default.interval;
 
-  if (intervalMinutes && intervalMinutes > 0) {
-    currentInterval = intervalMinutes;
-    saveIntervalToConfigs(currentInterval, ctx);
+    if (intervalMinutes && intervalMinutes > 0) {
+      currentInterval = intervalMinutes;
+      saveIntervalToConfigs(currentInterval, ctx);
 
-    // startSendingRules(ctx, currentInterval)
-    ctx.reply(`Интервал установлен на ${currentInterval} минут.`);
+      // startSendingRules(ctx, currentInterval)
+      ctx.reply(`Интервал установлен на ${currentInterval} минут.`);
+    } else {
+      ctx.reply('Usage: /setinterval <minutes>');
+    }
   } else {
-    ctx.reply('Usage: /setinterval <minutes>');
+    ctx.reply('У вас нет прав администратора для выполнения этой команды.');
   }
 });
 
@@ -253,6 +277,26 @@ bot.command('set_default_prompt', (ctx) => {
       ctx.reply('Произошла ошибка при обновлении промпта для картинки. Пожалуйста, попробуйте позже.');
     }
 });
+
+async function isAdmin(ctx: any): Promise<boolean> {
+  const chatId = ctx.chat.id;
+  const userId = ctx.from.id;
+  const chatType = ctx.chat.type;
+
+  // Если это приватный чат, то считаем пользователя администратором
+  if (chatType === 'private') {
+    return true;
+  }
+
+  try {
+    const admins = await ctx.getChatAdministrators(chatId);
+    const adminIds = admins.map((admin) => admin.user.id);
+    return adminIds.includes(userId);
+  } catch (error) {
+    console.error('Error while checking admin status:', error);
+    return false;
+  }
+}
 
 async function stylizeText(text: string): Promise<string> {
   const prompt = `Напиши очень эмоциональный мотивационный текст для фразы "${text}". В ответ не пиши ничего, кроме самого текста большими буквами на русском языке`;
