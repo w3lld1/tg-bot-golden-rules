@@ -191,6 +191,16 @@ bot.command('show_rules', (ctx) => {
 
 // Create a new command to start sending quotes with the default interval
 bot.command('start_sending', async (ctx) => {
+  const chatId = ctx.chat.id;
+
+  if (!configs[chatId]) {
+    configs[chatId] = configs.default;
+  }
+
+  if (!rules[chatId]) {
+    rules[chatId] = rules.default;
+  }
+
   if (await isAdmin(ctx)) {
     const chatId = ctx.chat.id
     let currentInterval = configs[chatId]?.interval ?? configs.default.interval;
