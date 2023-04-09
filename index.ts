@@ -241,7 +241,6 @@ bot.command('set_interval', async (ctx) => {
       currentInterval = intervalMinutes;
       saveIntervalToConfigs(currentInterval, ctx);
 
-      // startSendingRules(ctx, currentInterval)
       ctx.reply(`Интервал установлен на ${currentInterval} минут.`);
     } else {
       ctx.reply('Usage: /setinterval <minutes>');
@@ -393,9 +392,7 @@ function startSendingRules(ctx, intervalMinutes) {
     const currentHour = currentTime.getHours();
 
     // Не отправлять правила с 22:00 до 08:00
-    if (currentHour >= 22 || currentHour < 8) {
-      console.log('Ночной режим активен, правила не отправляются');
-    } else {
+    if (isDev || (currentHour >= 8 && currentHour < 22)) {
       sendRule(ctx);
     }
 
